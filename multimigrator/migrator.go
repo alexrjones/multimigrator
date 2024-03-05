@@ -16,7 +16,6 @@ import (
 type Migrator struct {
 	RootDir  string
 	Schemata []string
-	ConnStr  string
 }
 
 var ErrNoSchema = errors.New("schema not found")
@@ -83,6 +82,7 @@ func (mp migratorParts) applyMigrations() error {
 	var versionToApply uint = 1
 	for {
 		curr := mp[iter]
+		// Get the current applied version for this schema
 		appliedVersion, _, err := curr.instance.Version()
 		if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
 			return err

@@ -2,8 +2,8 @@ package internal
 
 import (
 	"go/format"
-	"html/template"
 	"strings"
+	"text/template"
 	"unicode"
 )
 
@@ -13,7 +13,6 @@ type TemplateArgs struct {
 }
 
 var funcMap = template.FuncMap{
-	// The name "inc" is what the function will be called in the template text.
 	"inc": func(i int) int {
 		return i + 1
 	},
