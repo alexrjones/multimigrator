@@ -1,4 +1,4 @@
-package multimigrator
+package internal
 
 import (
 	"errors"
@@ -23,14 +23,9 @@ type DatabaseDescription struct {
 	Ordering     []string `yaml:"schema_ordering"`
 }
 
-type MigrationParseResult struct {
-	DatabaseDescription DatabaseDescription
-	SchemaDirectories   map[string]string
-}
-
 var orderingRegex = regexp.MustCompile("order\\.ya?ml$")
 
-func ParseMigrationsDirectory(migrationsDir string) (*MigrationParseResult, error) {
+func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error) {
 
 	stat, err := os.Stat(migrationsDir)
 	if err != nil {
@@ -72,8 +67,5 @@ func ParseMigrationsDirectory(migrationsDir string) (*MigrationParseResult, erro
 		return nil, fmt.Errorf("missing migration directories: %s", strings.Join(errs, ", "))
 	}
 
-	return &MigrationParseResult{
-		DatabaseDescription: dd,
-		SchemaDirectories:   migrationDirs,
-	}, nil
+	return &dd, nil
 }

@@ -1,4 +1,4 @@
-package multimigrator
+package internal
 
 import (
 	"go/format"

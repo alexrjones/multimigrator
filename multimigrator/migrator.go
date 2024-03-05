@@ -1,36 +1,38 @@
-package migrator
+package multimigrator
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 type Migrator struct {
 	RootDir  string
 	Schemata []string
+	ConnStr  string
 }
 
 var ErrNoSchema = errors.New("schema not found")
 
 type migratorPart struct {
-	sourceDrv          migrationVersioner
-	instance           migrationStepper
-	lastAppliedVersion uint
+	sourceDrv    migrationSource
+	instance     migrationTarget
+	firstVersion uint
 }
 
-type migrationVersioner interface {
+type migrationSource interface {
 	Next(version uint) (nextVersion uint, err error)
 }
 
-type migrationStepper interface {
+type migrationTarget interface {
+	Version() (version uint, dirty bool, err error)
 	Steps(n int) error
 }
 
@@ -53,11 +55,11 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 			return err
 		}
 		// Make sure there's at least one migration version available
-		_, err = sourceDrv.First()
+		first, err := sourceDrv.First()
 		if err != nil {
 			return err
 		}
-		driver, err := postgres.WithInstance(db, &postgres.Config{SchemaName: schema})
+		driver, err := postgres.WithInstance(db, &postgres.Config{MigrationsTable: schema + "_" + postgres.DefaultMigrationsTable})
 		if err != nil {
 			return err
 		}
@@ -66,44 +68,57 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 			return err
 		}
 		migrators = append(migrators, &migratorPart{
-			sourceDrv:          sourceDrv,
-			instance:           instance,
-			lastAppliedVersion: 0,
+			sourceDrv:    sourceDrv,
+			instance:     instance,
+			firstVersion: first,
 		})
 	}
 
-	return nil
+	return migrators.applyMigrations()
 }
 
 func (mp migratorParts) applyMigrations() error {
 
 	iter := 0
-	var highestAppliedVersion uint = 0
+	var versionToApply uint = 1
 	for {
 		curr := mp[iter]
-		nextVersion, err := curr.sourceDrv.Next(curr.lastAppliedVersion)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				// We've migrated to the current version of this schema
-				if iter+1 == len(mp) {
-					break
-				}
-				// We've finished this schema, but there are still
-				// others to migrate
-				iter = (iter + 1) % len(mp)
-				continue
-			}
+		appliedVersion, _, err := curr.instance.Version()
+		if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
 			return err
 		}
-		if curr.lastAppliedVersion+1 == nextVersion || highestAppliedVersion == nextVersion {
-			err = mp[iter].instance.Steps(1)
-			if err != nil {
-				return err
+		if appliedVersion < versionToApply && versionToApply >= curr.firstVersion {
+			var nextVersion uint
+			if versionToApply == curr.firstVersion {
+				nextVersion = curr.firstVersion
+			} else {
+				// Get the next version that this schema has
+				nextVersion, err = curr.sourceDrv.Next(versionToApply - 1)
+				if err != nil {
+					if errors.Is(err, os.ErrNotExist) {
+						// We've finished migrating this schema
+						iter = (iter + 1) % len(mp)
+						if iter == 0 {
+							// We've migrated to the current version of our target schema
+							break
+						}
+						// There are still more schemata to migrate
+						continue
+					}
+					return err
+				}
 			}
-			curr.lastAppliedVersion = nextVersion
-			highestAppliedVersion = uint(math.Max(float64(highestAppliedVersion), float64(nextVersion)))
+			if nextVersion == versionToApply {
+				err = mp[iter].instance.Steps(1)
+				if err != nil {
+					return err
+				}
+			}
 		}
 		iter = (iter + 1) % len(mp)
+		if iter == 0 {
+			versionToApply++
+		}
 	}
 
 	return nil

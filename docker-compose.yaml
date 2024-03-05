@@ -1,0 +1,16 @@
+services:
+  postgresql:
+    image: "postgres:15"
+    ports:
+      - "5432:5432"
+    restart: always
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 1s
+      timeout: 10s
+      retries: 10
+      start_period: 1s
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres

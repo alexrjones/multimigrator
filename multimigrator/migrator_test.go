@@ -1,10 +1,11 @@
-package migrator
+package multimigrator
 
 import (
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,14 +28,22 @@ func (mv *mockMigrator) Next(version uint) (nextVersion uint, err error) {
 	return
 }
 
+func (mv *mockMigrator) Version() (version uint, dirty bool, err error) {
+	if mv.cursor == -1 {
+		return 0, false, migrate.ErrNilVersion
+	}
+
+	return mv.versions[mv.cursor], false, nil
+}
+
 func (mv *mockMigrator) Steps(n int) error {
 
 	for range n {
+		mv.cursor++
 		mv.downstream(identifiedVersion{
 			indexInParent: mv.indexInParent,
 			version:       mv.versions[mv.cursor],
 		})
-		mv.cursor++
 	}
 	return nil
 }
@@ -52,15 +61,16 @@ func (c *collector) collect(iv identifiedVersion) {
 	c.identifiedVersions = append(c.identifiedVersions, iv)
 }
 
-func newMockMigratorParts(versions ...[]uint) (migratorParts, *collector) {
+func newMockMigratorParts(versions [][]uint) (migratorParts, *collector) {
 
 	c := &collector{identifiedVersions: make([]identifiedVersion, 0)}
 	mp := migratorParts{}
 	for i, v := range versions {
-		mm := &mockMigrator{indexInParent: i, versions: v, downstream: c.collect}
+		mm := &mockMigrator{indexInParent: i, versions: v, cursor: -1, downstream: c.collect}
 		mp = append(mp, &migratorPart{
-			sourceDrv: mm,
-			instance:  mm,
+			sourceDrv:    mm,
+			instance:     mm,
+			firstVersion: v[0],
 		})
 	}
 	return mp, c
@@ -89,14 +99,17 @@ func TestApplyMigrations(t *testing.T) {
 		},
 		{
 			name:     "Dependent schema that begins after all earlier versions is applied correctly",
-			versions: [][]uint{{1, 2, 3}, {4, 5, 6}},
+			versions: [][]uint{{1, 2, 3}, {4, 5, 6}, {4, 5, 6}},
 			expected: []identifiedVersion{
 				{0, 1},
 				{0, 2},
 				{0, 3},
 				{1, 4},
+				{2, 4},
 				{1, 5},
+				{2, 5},
 				{1, 6},
+				{2, 6},
 			},
 		},
 		{
@@ -114,7 +127,7 @@ func TestApplyMigrations(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			mp, c := newMockMigratorParts(tc.versions...)
+			mp, c := newMockMigratorParts(tc.versions)
 			err := mp.applyMigrations()
 			assert.Nil(t, err)
 			assert.Equal(t, tc.expected, c.identifiedVersions)
