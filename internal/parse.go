@@ -19,8 +19,8 @@ var ErrNotDirectory = errors.New("provided path wasn't a directory")
 var ErrIncorrectUseOfOrderYaml = errors.New("order.yaml was in the wrong directory")
 
 type DatabaseDescription struct {
-	DatabaseName string   `yaml:"database_name"`
-	Ordering     []string `yaml:"schema_ordering"`
+	RootDirectory string
+	Ordering      []string `yaml:"schema_ordering"`
 }
 
 var orderingRegex = regexp.MustCompile("order\\.ya?ml$")
@@ -66,6 +66,7 @@ func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("missing migration directories: %s", strings.Join(errs, ", "))
 	}
+	dd.RootDirectory = migrationsDir
 
 	return &dd, nil
 }
