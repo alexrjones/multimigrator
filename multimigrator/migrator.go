@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"multimigrator/internal/schematadriver"
 	"os"
 	"strings"
 
@@ -13,12 +14,21 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+var ErrNoSchema = errors.New("schema not found")
+
 type Migrator struct {
 	RootDir  string
 	Schemata []string
+	mode     MigratorMode
+	paths    map[string][]string
 }
 
-var ErrNoSchema = errors.New("schema not found")
+type MigratorMode int
+
+const (
+	MigratorModeDir  MigratorMode = 1
+	MigratorModeFlat MigratorMode = 2
+)
 
 type migratorPart struct {
 	sourceDrv    migrationSource
@@ -37,6 +47,25 @@ type migrationTarget interface {
 
 type migratorParts []*migratorPart
 
+func NewMigrator(rootDir string, schemata []string, mode MigratorMode) (*Migrator, error) {
+
+	var paths map[string][]string
+	if mode == MigratorModeFlat {
+		var err error
+		paths, err = schematadriver.ExpandPaths(rootDir, schemata)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &Migrator{
+		RootDir:  rootDir,
+		Schemata: schemata,
+		mode:     mode,
+		paths:    paths,
+	}, nil
+}
+
 func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 
 	index, ok := findSchema(upToSchema, m.Schemata)
@@ -48,7 +77,12 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 	for i := 0; i < index+1; i++ {
 
 		schema := m.Schemata[i]
-		schemaPath := fmt.Sprintf("file://%s/%s", m.RootDir, schema)
+		var schemaPath string
+		if m.mode == MigratorModeFlat {
+			schemaPath = schematadriver.BuildURL(m.RootDir, m.paths[schema])
+		} else {
+			schemaPath = fmt.Sprintf("file://%s/%s", m.RootDir, schema)
+		}
 		sourceDrv, err := source.Open(schemaPath)
 		if err != nil {
 			return err

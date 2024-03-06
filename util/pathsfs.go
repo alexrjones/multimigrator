@@ -10,8 +10,9 @@ import (
 var ErrInvalidRoot = errors.New("invalid root directory")
 
 type pathsFS struct {
-	root  string
-	names map[string]fs.DirEntry
+	root       string
+	names      map[string]fs.DirEntry
+	namesSlice []fs.DirEntry
 }
 
 func PathsFS(root string, paths []string) (fs.ReadDirFS, error) {
@@ -27,18 +28,20 @@ func PathsFS(root string, paths []string) (fs.ReadDirFS, error) {
 			return nil, err
 		}
 	}
-
 	names := make(map[string]fs.DirEntry)
+	namesSlice := make([]fs.DirEntry, 0)
 	for _, p := range paths {
 		path := filepath.Join(canonicalRoot, p)
 		stat, err := os.Stat(path)
 		if err != nil {
 			return nil, err
 		}
-		names[p] = &finfoWrapper{stat}
+		finfo := &finfoWrapper{stat}
+		names[path] = finfo
+		namesSlice = append(namesSlice, finfo)
 	}
 
-	return &pathsFS{root: canonicalRoot, names: names}, nil
+	return &pathsFS{root: canonicalRoot, names: names, namesSlice: namesSlice}, nil
 }
 
 type finfoWrapper struct {
@@ -46,11 +49,11 @@ type finfoWrapper struct {
 }
 
 func (f *finfoWrapper) Name() string {
-	return f.Name()
+	return f.stat.Name()
 }
 
 func (f *finfoWrapper) IsDir() bool {
-	return f.IsDir()
+	return f.stat.IsDir()
 }
 
 func (f *finfoWrapper) Type() fs.FileMode {
@@ -71,39 +74,56 @@ func (f *finfoWrapper) Info() (fs.FileInfo, error) {
 // ValidPath(name), returning a *PathError with Err set to
 // ErrInvalid or ErrNotExist.
 func (p *pathsFS) Open(name string) (fs.File, error) {
-	if err := checkOk(name, p.names); err != nil {
+	name, err := p.validate(name)
+	if err != nil {
 		return nil, err
 	}
 
-	return os.Open(filepath.Join(p.root, name))
+	return os.Open(name)
 }
 
 // ReadDir reads the named directory
 // and returns a list of directory entries sorted by filename.
 func (p *pathsFS) ReadDir(name string) ([]fs.DirEntry, error) {
 
-	if err := checkOk(name, p.names); err != nil {
+	name, err := p.validate(name)
+	if err != nil {
 		return nil, err
 	}
 
-	return os.ReadDir(filepath.Join(p.root, name))
+	if name == p.root {
+		return p.namesSlice, nil
+	}
+
+	return os.ReadDir(name)
 }
 
-func checkOk(name string, names map[string]fs.DirEntry) error {
+func (p *pathsFS) validate(name string) (string, error) {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{
+		return "", &fs.PathError{
 			Op:   "open",
 			Path: name,
 			Err:  fs.ErrInvalid,
 		}
 	}
-	if _, ok := names[name]; !ok {
-		return &fs.PathError{
-			Op:   "open",
-			Path: name,
-			Err:  fs.ErrNotExist,
+
+	if !filepath.IsAbs(name) {
+		var err error
+		name, err = filepath.Abs(filepath.Join(p.root, name))
+		if err != nil {
+			return "", err
 		}
 	}
 
-	return nil
+	if _, ok := p.names[name]; !ok {
+		if name != p.root {
+			return "", &fs.PathError{
+				Op:   "open",
+				Path: name,
+				Err:  fs.ErrNotExist,
+			}
+		}
+	}
+
+	return name, nil
 }

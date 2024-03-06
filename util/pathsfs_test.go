@@ -41,6 +41,26 @@ func TestPathsFS_ReadFile_Error(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func TestPathsFS_ReadDir_Relative(t *testing.T) {
+
+	allowedFiles := []string{"1.txt"}
+	fs, err := PathsFS("../testdata/util/pathsfs", allowedFiles)
+	assert.Nil(t, err)
+
+	type testCase struct{ path string }
+	tcs := []testCase{
+		{"."},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.path, func(t *testing.T) {
+			dir, err := fs.ReadDir(tc.path)
+			assert.Nil(t, err)
+			assert.Len(t, dir, 1)
+			assert.Equal(t, "1.txt", dir[0].Name())
+		})
+	}
+}
+
 func TestPathsFS_ReadDir_Ok(t *testing.T) {
 
 	allowedFiles := []string{"nested"}

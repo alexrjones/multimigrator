@@ -72,9 +72,9 @@ func migrate(migrationsDir, connStr, target string) error {
 	if err != nil {
 		return err
 	}
-	migrator := &multimigrator.Migrator{
-		RootDir:  migrationsDir,
-		Schemata: result.Ordering,
+	migrator, err := multimigrator.NewMigrator(migrationsDir, result.Ordering, multimigrator.MigratorModeFlat)
+	if err != nil {
+		return err
 	}
 	config, err := pgx.ParseConfig(connStr)
 	if err != nil {

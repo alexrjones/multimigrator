@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -57,15 +56,15 @@ func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error
 	if dd.Ordering == nil {
 		return nil, errors.New("no order.yaml found")
 	}
-	var errs []string
-	for _, schema := range dd.Ordering {
-		if _, ok := migrationDirs[schema]; !ok {
-			errs = append(errs, schema)
-		}
-	}
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("missing migration directories: %s", strings.Join(errs, ", "))
-	}
+	//var errs []string
+	//for _, schema := range dd.Ordering {
+	//	if _, ok := migrationDirs[schema]; !ok {
+	//		errs = append(errs, schema)
+	//	}
+	//}
+	//if len(errs) > 0 {
+	//	return nil, fmt.Errorf("missing migration directories: %s", strings.Join(errs, ", "))
+	//}
 	dd.RootDirectory = migrationsDir
 
 	return &dd, nil
