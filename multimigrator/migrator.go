@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -102,6 +103,7 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 		if err != nil {
 			return err
 		}
+		instance.Log = logger
 		migrators = append(migrators, &migratorPart{
 			sourceDrv:    sourceDrv,
 			instance:     instance,
@@ -115,6 +117,7 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 func (mp migratorParts) applyMigrations() error {
 
 	iter := 0
+	appliedCount := 0
 	var versionToApply uint = 1
 	for {
 		curr := mp[iter]
@@ -149,6 +152,7 @@ func (mp migratorParts) applyMigrations() error {
 				if err != nil {
 					return err
 				}
+				appliedCount++
 			}
 		}
 		iter = (iter + 1) % len(mp)
@@ -156,6 +160,8 @@ func (mp migratorParts) applyMigrations() error {
 			versionToApply++
 		}
 	}
+
+	logger.Printf("Ran %d migrations", appliedCount)
 
 	return nil
 }
@@ -176,3 +182,17 @@ func findSchema(name string, schemata []string) (int, bool) {
 //	// Probe to see what the highest-level of the schema is
 //	db.
 //}
+
+var logger = MigrateLogger{true}
+
+type MigrateLogger struct {
+	verbose bool
+}
+
+func (ml MigrateLogger) Printf(format string, v ...any) {
+	log.Printf(format, v...)
+}
+
+func (ml MigrateLogger) Verbose() bool {
+	return ml.verbose
+}

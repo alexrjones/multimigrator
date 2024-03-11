@@ -26,14 +26,14 @@ func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error
 
 	stat, err := os.Stat(migrationsDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not stat path %s: %w", migrationsDir, err)
 	}
 	if !stat.IsDir() {
 		return nil, fmt.Errorf("for path %s: %w", migrationsDir, ErrNotDirectory)
 	}
 	dir, err := os.ReadDir(migrationsDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read dir: %w", err)
 	}
 	var dd DatabaseDescription
 	var found bool
@@ -43,7 +43,7 @@ func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error
 		}
 		open, err := os.Open(filepath.Join(migrationsDir, d.Name()))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not open %s: %w", d.Name(), err)
 		}
 		err = yaml.NewDecoder(open).Decode(&dd)
 		if err != nil {

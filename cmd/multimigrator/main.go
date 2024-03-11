@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	if len(os.Args) < 2 {
-		log.Fatalf("No subcommand provided")
+		log.Fatalf("No subcommand provided, invocation was: %v", os.Args)
 	}
 	switch os.Args[1] {
 	case "up":
