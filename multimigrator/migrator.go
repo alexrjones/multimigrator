@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"multimigrator/internal/schematadriver"
 	"os"
 	"strings"
+
+	"github.com/alexrjones/multimigrator/internal/schematadriver"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"

@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"multimigrator/internal"
-	"multimigrator/multimigrator"
 	"os"
+
+	"github.com/alexrjones/multimigrator/internal"
+	"github.com/alexrjones/multimigrator/multimigrator"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"

@@ -1,4 +1,4 @@
-module multimigrator
+module github.com/alexrjones/multimigrator
 
 go 1.22.0
 

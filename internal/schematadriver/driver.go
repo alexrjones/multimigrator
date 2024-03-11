@@ -3,13 +3,14 @@ package schematadriver
 import (
 	"fmt"
 	"io/fs"
-	"multimigrator/util"
 	nurl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/alexrjones/multimigrator/util"
 
 	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
