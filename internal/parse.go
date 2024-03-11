@@ -15,14 +15,12 @@ import (
 // Generate an enum for the ordering
 
 var ErrNotDirectory = errors.New("provided path wasn't a directory")
-var ErrIncorrectUseOfOrderYaml = errors.New("order.yaml was in the wrong directory")
 
 type DatabaseDescription struct {
-	RootDirectory string
-	Ordering      []string `yaml:"schema_ordering"`
+	Ordering []string `yaml:"schema_ordering"`
 }
 
-var orderingRegex = regexp.MustCompile("order\\.ya?ml$")
+var orderingRegex = regexp.MustCompile(`order\.ya?ml$`)
 
 func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error) {
 
@@ -38,34 +36,25 @@ func ParseMigrationsDirectory(migrationsDir string) (*DatabaseDescription, error
 		return nil, err
 	}
 	var dd DatabaseDescription
-	migrationDirs := make(map[string]string)
+	var found bool
 	for _, d := range dir {
-		if orderingRegex.MatchString(d.Name()) {
-			open, err := os.Open(filepath.Join(migrationsDir, d.Name()))
-			if err != nil {
-				return nil, err
-			}
-			err = yaml.NewDecoder(open).Decode(&dd)
-			if err != nil {
-				return nil, err
-			}
-		} else if d.IsDir() {
-			migrationDirs[d.Name()] = filepath.Join(migrationsDir, d.Name())
+		if d.IsDir() || !orderingRegex.MatchString(d.Name()) {
+			continue
 		}
+		open, err := os.Open(filepath.Join(migrationsDir, d.Name()))
+		if err != nil {
+			return nil, err
+		}
+		err = yaml.NewDecoder(open).Decode(&dd)
+		if err != nil {
+			return nil, err
+		}
+		found = true
+		break
 	}
-	if dd.Ordering == nil {
+	if !found {
 		return nil, errors.New("no order.yaml found")
 	}
-	//var errs []string
-	//for _, schema := range dd.Ordering {
-	//	if _, ok := migrationDirs[schema]; !ok {
-	//		errs = append(errs, schema)
-	//	}
-	//}
-	//if len(errs) > 0 {
-	//	return nil, fmt.Errorf("missing migration directories: %s", strings.Join(errs, ", "))
-	//}
-	dd.RootDirectory = migrationsDir
 
 	return &dd, nil
 }

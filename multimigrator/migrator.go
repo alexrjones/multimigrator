@@ -17,10 +17,9 @@ import (
 var ErrNoSchema = errors.New("schema not found")
 
 type Migrator struct {
-	RootDir  string
-	Schemata []string
-	mode     MigratorMode
-	paths    map[string][]string
+	RootDir     string
+	Schemata    []string
+	driverPaths []string
 }
 
 type MigratorMode int
@@ -58,11 +57,19 @@ func NewMigrator(rootDir string, schemata []string, mode MigratorMode) (*Migrato
 		}
 	}
 
+	driverPaths := make([]string, len(schemata))
+	for i := 0; i < len(schemata); i++ {
+		if mode == MigratorModeFlat {
+			driverPaths[i] = schematadriver.BuildURL(rootDir, paths[schemata[i]])
+		} else {
+			driverPaths[i] = fmt.Sprintf("file://%s/%s", rootDir, paths[schemata[i]])
+		}
+	}
+
 	return &Migrator{
-		RootDir:  rootDir,
-		Schemata: schemata,
-		mode:     mode,
-		paths:    paths,
+		RootDir:     rootDir,
+		Schemata:    schemata,
+		driverPaths: driverPaths,
 	}, nil
 }
 
@@ -77,13 +84,7 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 	for i := 0; i < index+1; i++ {
 
 		schema := m.Schemata[i]
-		var schemaPath string
-		if m.mode == MigratorModeFlat {
-			schemaPath = schematadriver.BuildURL(m.RootDir, m.paths[schema])
-		} else {
-			schemaPath = fmt.Sprintf("file://%s/%s", m.RootDir, schema)
-		}
-		sourceDrv, err := source.Open(schemaPath)
+		sourceDrv, err := source.Open(m.driverPaths[i])
 		if err != nil {
 			return err
 		}
@@ -168,3 +169,9 @@ func findSchema(name string, schemata []string) (int, bool) {
 
 	return -1, false
 }
+
+//func (m *Migrator) Down(db *sql.DB) error {
+//
+//	// Probe to see what the highest-level of the schema is
+//	db.
+//}

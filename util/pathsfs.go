@@ -44,24 +44,16 @@ func PathsFS(root string, paths []string) (fs.ReadDirFS, error) {
 	return &pathsFS{root: canonicalRoot, names: names, namesSlice: namesSlice}, nil
 }
 
+// implements [fs.DirEntry]
 type finfoWrapper struct {
-	stat os.FileInfo
-}
-
-func (f *finfoWrapper) Name() string {
-	return f.stat.Name()
-}
-
-func (f *finfoWrapper) IsDir() bool {
-	return f.stat.IsDir()
-}
-
-func (f *finfoWrapper) Type() fs.FileMode {
-	return f.stat.Mode()
+	os.FileInfo
 }
 
 func (f *finfoWrapper) Info() (fs.FileInfo, error) {
-	return f.stat, nil
+	return f, nil
+}
+func (f *finfoWrapper) Type() fs.FileMode {
+	return f.Mode().Type()
 }
 
 // Open opens the named file.
@@ -91,10 +83,15 @@ func (p *pathsFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, err
 	}
 
+	// If reading the root directory itself, don't delegate to
+	// os.ReadDir, because that might return files the user has
+	// deliberately filtered out. Instead return the names we
+	// collected during initialisation.
 	if name == p.root {
 		return p.namesSlice, nil
 	}
 
+	// We'll allow reading all files in any child directories though.
 	return os.ReadDir(name)
 }
 
@@ -116,6 +113,8 @@ func (p *pathsFS) validate(name string) (string, error) {
 	}
 
 	if _, ok := p.names[name]; !ok {
+		// The root directory is not contained in the list of names,
+		// so need another check for it here
 		if name != p.root {
 			return "", &fs.PathError{
 				Op:   "open",
