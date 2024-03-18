@@ -119,22 +119,30 @@ func (mp migratorParts) applyMigrations() error {
 	iter := 0
 	appliedCount := 0
 	var versionToApply uint = 1
+	lastSeenNextVersions := make([]uint, len(mp))
+	done := make([]bool, len(mp))
 	for {
-		curr := mp[iter]
-		// Get the current applied version for this schema
-		appliedVersion, _, err := curr.instance.Version()
-		if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
-			return err
-		}
-		if appliedVersion < versionToApply && versionToApply >= curr.firstVersion {
-			var nextVersion uint
-			if versionToApply == curr.firstVersion {
-				nextVersion = curr.firstVersion
-			} else {
-				// Get the next version that this schema has
-				nextVersion, err = curr.sourceDrv.Next(versionToApply - 1)
-				if err != nil {
-					if errors.Is(err, os.ErrNotExist) {
+		if !done[iter] && lastSeenNextVersions[iter] <= versionToApply && mp[iter].firstVersion <= versionToApply {
+			curr := mp[iter]
+			// Get the current applied version for this schema
+			appliedVersion, _, err := curr.instance.Version()
+			if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
+				return err
+			}
+			if appliedVersion < versionToApply && versionToApply >= curr.firstVersion {
+				var nextVersion uint
+				if versionToApply == curr.firstVersion {
+					nextVersion = curr.firstVersion
+				} else if lastSeenNextVersions[iter] != 0 && lastSeenNextVersions[iter] == versionToApply {
+					nextVersion = versionToApply
+				} else {
+					// Get the next version that this schema has
+					nextVersion, err = curr.sourceDrv.Next(versionToApply - 1)
+					if err != nil {
+						if !errors.Is(err, os.ErrNotExist) {
+							return err
+						}
+						done[iter] = true
 						// We've finished migrating this schema
 						iter = (iter + 1) % len(mp)
 						if iter == 0 {
@@ -144,15 +152,17 @@ func (mp migratorParts) applyMigrations() error {
 						// There are still more schemata to migrate
 						continue
 					}
-					return err
+					if nextVersion > versionToApply {
+						lastSeenNextVersions[iter] = nextVersion
+					}
 				}
-			}
-			if nextVersion == versionToApply {
-				err = mp[iter].instance.Steps(1)
-				if err != nil {
-					return err
+				if nextVersion == versionToApply {
+					err = mp[iter].instance.Steps(1)
+					if err != nil {
+						return err
+					}
+					appliedCount++
 				}
-				appliedCount++
 			}
 		}
 		iter = (iter + 1) % len(mp)

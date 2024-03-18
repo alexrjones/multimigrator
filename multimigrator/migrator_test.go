@@ -124,6 +124,18 @@ func TestApplyMigrations(t *testing.T) {
 				{1, 3},
 			},
 		},
+		{
+			name:     "Schemata can be sparse",
+			versions: [][]uint{{1, 2, 3}, {800}, {800, 900}},
+			expected: []identifiedVersion{
+				{0, 1},
+				{0, 2},
+				{0, 3},
+				{1, 800},
+				{2, 800},
+				{2, 900},
+			},
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
