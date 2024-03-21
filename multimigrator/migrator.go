@@ -88,20 +88,20 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 		schema := m.Schemata[i]
 		sourceDrv, err := source.Open(m.driverPaths[i])
 		if err != nil {
-			return err
+			return fmt.Errorf("while opening driver for schema %s: %w", schema, err)
 		}
 		// Make sure there's at least one migration version available
 		first, err := sourceDrv.First()
 		if err != nil {
-			return err
+			return fmt.Errorf("while getting first version for schema %s: %w", schema, err)
 		}
 		driver, err := postgres.WithInstance(db, &postgres.Config{MigrationsTable: schema + "_" + postgres.DefaultMigrationsTable})
 		if err != nil {
-			return err
+			return fmt.Errorf("while opening database for schema %s: %w", schema, err)
 		}
 		instance, err := migrate.NewWithInstance(schema, sourceDrv, "test", driver)
 		if err != nil {
-			return err
+			return fmt.Errorf("while creating migrate instance for schema %s: %w", schema, err)
 		}
 		instance.Log = logger
 		migrators = append(migrators, &migratorPart{

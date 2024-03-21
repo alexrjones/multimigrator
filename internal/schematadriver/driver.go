@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -83,27 +84,36 @@ func parseURL(url string) (string, []string, error) {
 // - schema index
 // - schema name
 // - migration identifier
-var regexTemplate = "\\d+_\\d+{{.Index}}_{{.SchemaName}}_[^.]+\\.(?:up|down)\\.sql"
+var regexTemplate = "\\d+_\\d+_{{.SchemaName}}_[^.]+\\.(?:up|down)\\.sql"
 var tmpl = template.Must(template.New("regex_template").Parse(regexTemplate))
 
 func ExpandPaths(rootDir string, schemata []string) (map[string][]string, error) {
 
-	// Build an ordered list of regexes that will match
-	// migrations for a particular schema
-	regexes := make(map[string]*regexp.Regexp, len(schemata))
-	for i, s := range schemata {
+	type regexEntry struct {
+		re  *regexp.Regexp
+		sch string
+	}
+	byLengthDesc := slices.Clone(schemata)
+	slices.SortFunc(byLengthDesc, func(a, b string) int {
+		return len(b) - len(a)
+	})
+	// Build a list of regexes that will match migrations for a particular schema.
+	// Schemata with shorter names are earlier in the list so that the most specific
+	// name will match first when iterating the schema files.
+	regexes := make([]regexEntry, len(schemata))
+	for i, s := range byLengthDesc {
 		var sb strings.Builder
 		err := tmpl.Execute(&sb, struct {
-			Index      int
 			SchemaName string
-		}{i + 1, s})
+		}{s})
 		if err != nil {
 			return nil, err
 		}
-		regexes[s], err = regexp.Compile(sb.String())
+		r, err := regexp.Compile(sb.String())
 		if err != nil {
 			return nil, err
 		}
+		regexes[i] = regexEntry{r, s}
 	}
 
 	ret := make(map[string][]string)
@@ -116,14 +126,14 @@ func ExpandPaths(rootDir string, schemata []string) (map[string][]string, error)
 			return nil
 		}
 
-		for s, r := range regexes {
-			if r.MatchString(path) {
+		for _, r := range regexes {
+			if r.re.MatchString(path) {
 
-				if _, ok := ret[s]; !ok {
-					ret[s] = make([]string, 0)
+				if _, ok := ret[r.sch]; !ok {
+					ret[r.sch] = make([]string, 0)
 				}
 				// Use the file name, as the `path` variable is absolute
-				ret[s] = append(ret[s], info.Name())
+				ret[r.sch] = append(ret[r.sch], info.Name())
 				return nil
 			}
 		}
