@@ -28,29 +28,62 @@ var funcMap = template.FuncMap{
 		}
 		return sb.String()
 	},
+	"last_index": func(index int, c []string) bool {
+
+		return index == len(c)-1
+	},
+	"join_strings": func(c []string) string {
+
+		return strings.Join(c, `", "`)
+	},
 }
 
 var tmplStr = `package {{.PackageName}}
 
-import "fmt"
+import (
+	"fmt"
+	"errors"
+)
 
-type SchemaLevel int
+var ErrInvalidSchemaLevel = errors.New("invalid schema level")
+var SchemaNames = []string{ "{{join_strings .Schemata}}" }
+
+type SchemaLevel uint
 
 const (
-	{{- range $index, $schemaName := .Schemata}}
+	{{$schemata := .Schemata}}
+	{{- range $index, $schemaName := $schemata}}
 	SchemaLevel{{fmt $schemaName}} SchemaLevel = {{inc $index}}
+	{{- if (last_index $index $schemata)}}
+	MaximumSchemaLevel SchemaLevel = SchemaLevel{{fmt $schemaName}}
+	{{- end}}
 	{{- end}}
 )
 
-func (s SchemaLevel) String() string {
+func (s SchemaLevel) SchemaName() (string, error) {
+
+	var ret string
 
 	switch s {
 	{{- range $index, $schemaName := .Schemata}}
-	case SchemaLevel{{fmt $schemaName}}: return "{{$schemaName}}"
+	case SchemaLevel{{fmt $schemaName}}: ret = "{{$schemaName}}"
 	{{- end}}
 	}
 
-	return fmt.Sprintf("SchemaLevel(%d)", s)
+	if ret == "" {
+		return "", ErrInvalidSchemaLevel
+	}
+
+	return ret, nil
+}
+
+func (s SchemaLevel) String() string {
+
+	ret, err := s.SchemaName()
+	if err != nil {
+		return fmt.Sprintf("SchemaLevel(%d)", s)
+	}
+	return ret
 }
 `
 var tmpl = template.Must(template.New("enumTemplate").Funcs(funcMap).Parse(tmplStr))

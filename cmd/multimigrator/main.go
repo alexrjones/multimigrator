@@ -73,7 +73,7 @@ func migrate(migrationsDir, connStr, target string) error {
 	if err != nil {
 		return err
 	}
-	migrator, err := multimigrator.NewMigrator(migrationsDir, result.Ordering, multimigrator.MigratorModeFlat)
+	migrator, err := multimigrator.NewMigrator(migrationsDir, result.Ordering, true)
 	if err != nil {
 		return err
 	}

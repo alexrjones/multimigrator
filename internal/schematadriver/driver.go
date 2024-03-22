@@ -89,6 +89,7 @@ var tmpl = template.Must(template.New("regex_template").Parse(regexTemplate))
 
 func ExpandPaths(rootDir string, schemata []string) (map[string][]string, error) {
 
+	rootDir = filepath.Clean(rootDir)
 	type regexEntry struct {
 		re  *regexp.Regexp
 		sch string

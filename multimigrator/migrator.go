@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alexrjones/multimigrator/internal/schematadriver"
@@ -22,14 +23,8 @@ type Migrator struct {
 	RootDir     string
 	Schemata    []string
 	driverPaths []string
+	enableLog   bool
 }
-
-type MigratorMode int
-
-const (
-	MigratorModeDir  MigratorMode = 1
-	MigratorModeFlat MigratorMode = 2
-)
 
 type migratorPart struct {
 	sourceDrv    migrationSource
@@ -48,35 +43,35 @@ type migrationTarget interface {
 
 type migratorParts []*migratorPart
 
-func NewMigrator(rootDir string, schemata []string, mode MigratorMode) (*Migrator, error) {
+func NewMigrator(rootDir string, schemata []string, enableLog bool) (*Migrator, error) {
 
 	var paths map[string][]string
-	if mode == MigratorModeFlat {
-		var err error
-		paths, err = schematadriver.ExpandPaths(rootDir, schemata)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	rootDir, err = filepath.Abs(rootDir)
+	if err != nil {
+		return nil, err
+	}
+	paths, err = schematadriver.ExpandPaths(rootDir, schemata)
+	if err != nil {
+		return nil, err
 	}
 
 	driverPaths := make([]string, len(schemata))
 	for i := 0; i < len(schemata); i++ {
-		if mode == MigratorModeFlat {
-			driverPaths[i] = schematadriver.BuildURL(rootDir, paths[schemata[i]])
-		} else {
-			driverPaths[i] = fmt.Sprintf("file://%s/%s", rootDir, paths[schemata[i]])
-		}
+		driverPaths[i] = schematadriver.BuildURL(rootDir, paths[schemata[i]])
 	}
 
 	return &Migrator{
 		RootDir:     rootDir,
 		Schemata:    schemata,
 		driverPaths: driverPaths,
+		enableLog:   enableLog,
 	}, nil
 }
 
 func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 
+	var logger migrate.Logger = NilLogger{}
 	index, ok := findSchema(upToSchema, m.Schemata)
 	if !ok {
 		return fmt.Errorf("couldn't find schema %s: %w", upToSchema, ErrNoSchema)
@@ -90,6 +85,7 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("while opening driver for schema %s: %w", schema, err)
 		}
+		defer sourceDrv.Close()
 		// Make sure there's at least one migration version available
 		first, err := sourceDrv.First()
 		if err != nil {
@@ -99,11 +95,15 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 		if err != nil {
 			return fmt.Errorf("while opening database for schema %s: %w", schema, err)
 		}
+		defer driver.Close()
 		instance, err := migrate.NewWithInstance(schema, sourceDrv, "test", driver)
 		if err != nil {
 			return fmt.Errorf("while creating migrate instance for schema %s: %w", schema, err)
 		}
-		instance.Log = logger
+		if m.enableLog {
+			logger = NewMigrateLogger()
+			instance.Log = logger
+		}
 		migrators = append(migrators, &migratorPart{
 			sourceDrv:    sourceDrv,
 			instance:     instance,
@@ -111,10 +111,10 @@ func (m *Migrator) Up(upToSchema string, db *sql.DB) error {
 		})
 	}
 
-	return migrators.applyMigrations()
+	return migrators.applyMigrations(logger)
 }
 
-func (mp migratorParts) applyMigrations() error {
+func (mp migratorParts) applyMigrations(logger migrate.Logger) error {
 
 	iter := 0
 	appliedCount := 0
@@ -187,13 +187,9 @@ func findSchema(name string, schemata []string) (int, bool) {
 	return -1, false
 }
 
-//func (m *Migrator) Down(db *sql.DB) error {
-//
-//	// Probe to see what the highest-level of the schema is
-//	db.
-//}
-
-var logger = MigrateLogger{true}
+func NewMigrateLogger() migrate.Logger {
+	return MigrateLogger{true}
+}
 
 type MigrateLogger struct {
 	verbose bool
@@ -206,3 +202,9 @@ func (ml MigrateLogger) Printf(format string, v ...any) {
 func (ml MigrateLogger) Verbose() bool {
 	return ml.verbose
 }
+
+type NilLogger struct{}
+
+func (ml NilLogger) Printf(format string, v ...any) {}
+
+func (ml NilLogger) Verbose() bool { return false }
